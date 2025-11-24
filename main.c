@@ -55,8 +55,8 @@ FILE * binary_file;
 
 /* allocate and set tracing flags */
 int TraceScan = FALSE;
-int TraceParse = FALSE;
-int TraceAnalyze = FALSE;
+int TraceParse = TRUE;
+int TraceAnalyze = TRUE;
 int TraceCode = FALSE;
 int TraceTarget = FALSE; // TODO: put on globals.h
 int TraceBinary = FALSE; // TODO: put on globals.h
