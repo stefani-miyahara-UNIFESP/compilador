@@ -1,676 +1,346 @@
 /****************************************************/
 /* File: cminus.y                                   */
-/* Gramática da Linguagem C-                        */
-/* Diego Wendel de Oliveira Ferreira                */
+/* The C- Yacc/Bison specification file             */
+/* Adequado ao Projeto 2S2025 (Standard)            */
 /****************************************************/
-
 %{
-    #define YYPARSER /* distinguishes Yacc output from other code files */
+#define YYPARSER /* distinguishes Yacc output from other code files */
 
-    #include "globals.h"
-    #include "util.h"
-    #include "scan.h"
-    #include "parse.h"
+#include "globals.h"
+#include "util.h"
+#include "scan.h"
+#include "parse.h"
 
-    #define YYSTYPE TreeNode *
-    char * savedName; /* for use in assignments */
-    int savedLineNo;  /* ditto */
-    TreeNode * savedTree; /* stores syntax tree for later return */
-    int yylex(void);
-    int yyerror(char * message);
-    TreeNode * createSysCall(ExpType type, SysCallKind syscall);
-    void insertNewNode(TreeNode * node);
+#define YYSTYPE TreeNode *
+static char * savedName; /* for use in assignments */
+static int savedLineNo;  /* ditto */
+static TreeNode * savedTree; /* stores syntax tree for later return */
+static int yylex(void);
+int yyerror(char * message);
+
 %}
 
-%token IF ELSE WHILE RETURN
+%token IF ELSE WHILE RETURN INT VOID
 %token ID NUM
-%token MAIOR MAIORIGUAL MENOR MENORIGUAL IGUAL DIFERENTE MAIS MENOS VEZES DIVISAO MODULO
-%token SHIFT_LEFT SHIFT_RIGHT AND OR XOR NOT LOGICAL_AND LOGICAL_OR
-%token ATRIBUICAO ATRIB_MAIS ATRIB_MENOS ATRIB_VEZES ATRIB_DIVISAO ATRIB_MODULO
-%token ATRIB_AND ATRIB_OR ATRIB_XOR ATRIB_SHIFT_LEFT ATRIB_SHIFT_RIGHT
-%token LPAREN RPAREN SEMI LBRACKET RBRACKET COMMA LKEY RKEY QUESTION COLON
-%token ERROR
-%token INT VOID
+%token MAIS MENOS VEZES DIVISAO
+%token MENOR MENORIGUAL MAIOR MAIORIGUAL IGUAL DIFERENTE
+%token ATRIBUICAO
+%token LPAREN RPAREN LBRACKET RBRACKET LKEY RKEY SEMI COMMA
+%token ERROR 
+
+/* Precedência para resolver Dangling Else */
 %nonassoc RPAREN
 %nonassoc ELSE
 
-%% /* Gramática C- */
+%% 
 
-program
-    : declarationList
-        {
-            savedTree = $1;
-        }
-    ;
+programa     : declaration_list
+                 { savedTree = $1;} 
+            ;
 
-declarationList
-    : declarationList declaration
-        {
-            YYSTYPE t = $1;
-            if (t != NULL) {
-                while (t->sibling != NULL) {
-                    t = t->sibling;
-                }
-                t->sibling = $2;
-                $$ = $1;
-            } else {
-                $$ = $2;
-            }
-        }
-    | declaration { $$ = $1; }
-    ;
+declaration_list : declaration_list declaration
+                 { YYSTYPE t = $1;
+                   if (t != NULL)
+                   { while (t->sibling != NULL)
+                        t = t->sibling;
+                     t->sibling = $2;
+                     $$ = $1; }
+                     else $$ = $2;
+                 }
+            | declaration
+                 { $$ = $1; }
+            ;
 
-declaration
-    : varDeclaration { $$ = $1; }
-    | funDeclaration { $$ = $1; }
-    ;
+declaration : var_declaration
+                 { $$ = $1; }
+            | fun_declaration
+                 { $$ = $1; }
+            ;
 
-varDeclaration
-    : typeSpecifier id SEMI
-        {
-            $$ = $1;
-            $$->child[0] = $2;
-            $$->child[0]->type = $$->type;
-            $$->child[0]->kind.var.mem = LOCALK;
-        }
-    | typeSpecifier id LBRACKET num RBRACKET SEMI
-        {
-            $$ = $1;
-            $$->child[0] = $2;
-            $$->child[0]->type = $$->type;
-            $$->child[0]->kind.var.mem = LOCALK;
-            $$->child[0]->kind.var.varKind = VECTORK;
-            $$->child[0]->child[0] = $4;
-            $$->child[0]->child[0]->type = INTEGER_TYPE;
-        }
-    ;
+var_declaration : type_specifier id SEMI
+                 { $$ = $1;
+                   $$->child[0] = $2;
+                   $$->child[0]->kind.var.mem = LOCALK; /* Default, analyze arruma */
+                 }
+            | type_specifier id LBRACKET num RBRACKET SEMI
+                 { $$ = $1;
+                   $$->child[0] = $2;
+                   $$->child[0]->kind.var.varKind = VECTORK;
+                   $$->child[0]->kind.var.mem = LOCALK;
+                   $$->child[0]->child[0] = $4;
+                 }
+            ;
 
-typeSpecifier
-    : INT
-        {
-            $$ = newStmtNode(INTEGERK);
-            $$->type = INTEGER_TYPE;
-            $$->op = INT;
-        }
-    | VOID
-        {
-            $$ = newStmtNode(VOIDK);
-            $$->type = VOID_TYPE;
-            $$->op = VOID;
-        }
-    ;
+type_specifier : INT
+                 { $$ = newStmtNode(INTEGERK);
+                   $$->type = INTEGER_TYPE;
+                 }
+            | VOID
+                 { $$ = newStmtNode(VOIDK);
+                   $$->type = VOID_TYPE;
+                 }
+            ;
 
-funDeclaration
-    : typeSpecifier id LPAREN params RPAREN compoundStmt
-        {
-            $$ = $1;
-            $$->child[0] = $2;
-            $$->child[0]->type = $$->type;
-            $$->child[0]->kind.var.varKind = FUNCTIONK;
-            $$->child[0]->kind.var.mem = FUNCTION_MEM;
-            $$->child[0]->child[0] = $4;
-            $$->child[0]->child[1] = $6;
-        }
-    ;
+fun_declaration : type_specifier id LPAREN params RPAREN compound_stmt
+                 { $$ = $1;
+                   $$->child[0] = $2;
+                   $$->child[0]->kind.var.varKind = FUNCTIONK;
+                   $$->child[0]->kind.var.mem = FUNCTION_MEM;
+                   $$->child[0]->child[0] = $4; /* Parametros */
+                   $$->child[0]->child[1] = $6; /* Corpo */
+                 }
+            ;
 
-params
-    : paramList { $$ = $1; }
-    | VOID { $$ = NULL; }
-    ;
+params      : param_list
+                 { $$ = $1; }
+            | VOID
+                 { $$ = NULL; }
+            ;
 
-paramList
-    : paramList COMMA param
-        {
-            YYSTYPE t = $1;
-            if (t != NULL) {
-            	while (t->sibling != NULL) {
-            		t = t->sibling;
-            	}
-            	t->sibling = $3;
-            	$$ = $1;
-            } else {
-            	$$ = $3;
-            }
-        }
-    | param { $$ = $1; }
-    ;
+param_list  : param_list COMMA param
+                 { YYSTYPE t = $1;
+                   if (t != NULL)
+                   { while (t->sibling != NULL)
+                        t = t->sibling;
+                     t->sibling = $3;
+                     $$ = $1; }
+                     else $$ = $3;
+                 }
+            | param
+                 { $$ = $1; }
+            ;
 
-param
-    : typeSpecifier id
-        {
-            $$ = $1;
-            $$->child[0] = $2;
-            $$->child[0]->kind.var.mem = PARAMK;
-        }
-    | typeSpecifier id LBRACKET RBRACKET
-        {
-            $$ = $1;
-            $$->child[0] = $2;
-            $$->child[0]->kind.var.mem = PARAMK;
-            $$->child[0]->kind.var.varKind = VECTORK;
-        }
-    ;
+param       : type_specifier id
+                 { $$ = $1;
+                   $$->child[0] = $2;
+                   $$->child[0]->kind.var.mem = PARAMK;
+                 }
+            | type_specifier id LBRACKET RBRACKET
+                 { $$ = $1;
+                   $$->child[0] = $2;
+                   $$->child[0]->kind.var.mem = PARAMK;
+                   $$->child[0]->kind.var.varKind = VECTORK;
+                 }
+            ;
 
-compoundStmt
-    : LKEY localDeclarations statementList RKEY
-        {
-            $$ = newStmtNode(COMPK);
-            $$->child[0] = $2;
-            $$->child[1] = $3;
-            $$->op = COMPK;
-        }
-    ;
+compound_stmt : LKEY local_declarations statement_list RKEY
+                 { $$ = newStmtNode(COMPK);
+                   $$->child[0] = $2;
+                   $$->child[1] = $3;
+                 }
+            ;
 
-localDeclarations
-    : localDeclarations varDeclaration
-        {
-        	YYSTYPE t = $1;
-        	if (t != NULL) {
-        		while (t->sibling != NULL) {
-        			t = t->sibling;
-        		}
-        		t->sibling = $2;
-        		$$ = $1;
-        	} else {
-        		$$ = $2;
-        	}
-        }
-    | vazio { $$ = $1; }
-    ;
+local_declarations : local_declarations var_declaration
+                 { YYSTYPE t = $1;
+                   if (t != NULL)
+                   { while (t->sibling != NULL)
+                        t = t->sibling;
+                     t->sibling = $2;
+                     $$ = $1; }
+                     else $$ = $2;
+                 }
+            | /* empty */
+                 { $$ = NULL; }
+            ;
 
-statementList
-    : statementList statement
-        {
-        	YYSTYPE t = $1;
-        	if (t != NULL) {
-        		while (t->sibling != NULL) {
-        			t = t->sibling;
-        		}
-        		t->sibling = $2;
-        		$$ = $1;
-        	} else {
-        		$$ = $2;
-        	}
-        }
-    | vazio { $$ = $1; }
-    ;
+statement_list : statement_list statement
+                 { YYSTYPE t = $1;
+                   if (t != NULL)
+                   { while (t->sibling != NULL)
+                        t = t->sibling;
+                     t->sibling = $2;
+                     $$ = $1; }
+                     else $$ = $2;
+                 }
+            | /* empty */
+                 { $$ = NULL; }
+            ;
 
-statement
-    : expressionStmt { $$ = $1; }
-    | compoundStmt { $$ = $1; }
-    | selectionStmt { $$ = $1; }
-    | iterationStmt { $$ = $1; }
-    | returnStmt { $$ = $1; }
-    ;
+statement   : expression_stmt
+                 { $$ = $1; }
+            | compound_stmt
+                 { $$ = $1; }
+            | selection_stmt
+                 { $$ = $1; }
+            | iteration_stmt
+                 { $$ = $1; }
+            | return_stmt
+                 { $$ = $1; }
+            ;
 
-expressionStmt
-    : expression SEMI { $$ = $1; }
-    | SEMI { $$ = NULL; }
-    ;
+expression_stmt : expression SEMI
+                 { $$ = $1; }
+            | SEMI
+                 { $$ = NULL; }
+            ;
 
-selectionStmt
-    : IF LPAREN expression RPAREN statement
-        {
-            $$ = newStmtNode(IFK);
-            $$->child[0] = $3;
-            $$->child[1] = $5;
-            $$->op = IFK;
-        }
-    | IF LPAREN expression RPAREN statement ELSE statement
-        {
-            $$ = newStmtNode(IFK);
-            $$->child[0] = $3;
-            $$->child[1] = $5;
-            $$->child[2] = $7;
-            $$->op = IFK;
-        }
-    ;
+selection_stmt : IF LPAREN expression RPAREN statement
+                 { $$ = newStmtNode(IFK);
+                   $$->child[0] = $3;
+                   $$->child[1] = $5;
+                 }
+            | IF LPAREN expression RPAREN statement ELSE statement
+                 { $$ = newStmtNode(IFK);
+                   $$->child[0] = $3;
+                   $$->child[1] = $5;
+                   $$->child[2] = $7;
+                 }
+            ;
 
-iterationStmt
-    : WHILE LPAREN expression RPAREN statement
-        {
-        	$$ = newStmtNode(WHILEK);
-        	$$->child[0] = $3;
-        	$$->child[1] = $5;
-            $$->op = WHILEK;
-        }
-    ;
+iteration_stmt : WHILE LPAREN expression RPAREN statement
+                 { $$ = newStmtNode(WHILEK);
+                   $$->child[0] = $3;
+                   $$->child[1] = $5;
+                 }
+            ;
 
-returnStmt
-    : RETURN SEMI
-        {
-        	$$ = newStmtNode(RETURNK);
-            $$->op = RETURNK;
-        }
-    | RETURN expression SEMI
-        {
-        	$$ = newStmtNode(RETURNK);
-        	$$->child[0] = $2;
-            $$->op = RETURNK;
-        }
-    ;
+return_stmt : RETURN SEMI
+                 { $$ = newStmtNode(RETURNK); }
+            | RETURN expression SEMI
+                 { $$ = newStmtNode(RETURNK);
+                   $$->child[0] = $2;
+                 }
+            ;
 
-expression
-    : var assigmentOperator expression
-        {
-            $$ = $2;
-            $$->child[0] = $1;
-        	$$->child[1] = $3;
-        }
-    | conditionalExpression { $$ = $1; }
-    ;
+expression  : var ATRIBUICAO expression
+                 { $$ = newExpNode(ATRIBK);
+                   $$->op = ATRIBUICAO;
+                   $$->child[0] = $1;
+                   $$->child[1] = $3;
+                 }
+            | simple_expression
+                 { $$ = $1; }
+            ;
 
-assigmentOperator
-    : ATRIBUICAO
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIBUICAO;
-        }
-    | ATRIB_MAIS
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_MAIS;
-        }
-    | ATRIB_MENOS
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_MENOS;
-        }
-    | ATRIB_VEZES
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_VEZES;
-        }
-    | ATRIB_DIVISAO
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_DIVISAO;
-        }
-    | ATRIB_MODULO
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_MODULO;
-        }
-    | ATRIB_AND
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_AND;
-        }
-    | ATRIB_OR
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_OR;
-        }
-    | ATRIB_XOR
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_XOR;
-        }
-    | ATRIB_SHIFT_LEFT
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_SHIFT_LEFT;
-        }
-    | ATRIB_SHIFT_RIGHT
-        {
-        	$$ = newExpNode(ATRIBK);
-        	$$->op = ATRIB_SHIFT_RIGHT;
-        }
-    ;
+var         : id
+                 { $$ = $1; 
+                   $$->kind.var.acesso = ACCESSK; 
+                 }
+            | id LBRACKET expression RBRACKET
+                 { $$ = $1;
+                   $$->kind.var.acesso = ACCESSK;
+                   $$->kind.var.varKind = VECTORK;
+                   $$->child[0] = $3;
+                 }
+            ;
 
-var
-    : id
-        {
-        	$$ = $1;
-            $$->kind.var.acesso = ACCESSK;
-        }
-    | id LBRACKET expression RBRACKET
-        {
-        	$$ = $1;
-        	$$->kind.var.varKind = VECTORK;
-            $$->kind.var.acesso = ACCESSK;
-        	$$->child[0] = $3;
-        }
-    ;
+simple_expression : additive_expression relop additive_expression
+                 { $$ = $2;
+                   $$->child[0] = $1;
+                   $$->child[1] = $3;
+                 }
+            | additive_expression
+                 { $$ = $1; }
+            ;
 
-conditionalExpression
-    : logicalOrExpression QUESTION expression COLON conditionalExpression
-        {
-            $$ = newStmtNode(IFK);
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-            $$->child[2] = $5;
-            $$->op = IFK;
-        }
-    | logicalOrExpression { $$ = $1; }
-    ;
+relop       : MENORIGUAL
+                 { $$ = newExpNode(RELK); $$->op = MENORIGUAL; }
+            | MENOR
+                 { $$ = newExpNode(RELK); $$->op = MENOR; }
+            | MAIOR
+                 { $$ = newExpNode(RELK); $$->op = MAIOR; }
+            | MAIORIGUAL
+                 { $$ = newExpNode(RELK); $$->op = MAIORIGUAL; }
+            | IGUAL
+                 { $$ = newExpNode(RELK); $$->op = IGUAL; }
+            | DIFERENTE
+                 { $$ = newExpNode(RELK); $$->op = DIFERENTE; }
+            ;
 
-logicalOrExpression
-    : logicalOrExpression LOGICAL_OR logicalAndExpression
-        {
-            $$ = newExpNode(LOGICK);
-            $$->op = LOGICAL_OR;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | logicalAndExpression { $$ = $1; }
-    ;
+additive_expression : additive_expression addop term
+                 { $$ = $2;
+                   $$->child[0] = $1;
+                   $$->child[1] = $3;
+                 }
+            | term
+                 { $$ = $1; }
+            ;
 
-logicalAndExpression
-    : logicalAndExpression LOGICAL_AND inclusiveOrExpression
-        {
-            $$ = newExpNode(LOGICK);
-            $$->op = LOGICAL_AND;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | inclusiveOrExpression { $$ = $1; }
-    ;
+addop       : MAIS
+                 { $$ = newExpNode(ARITHK); $$->op = MAIS; }
+            | MENOS
+                 { $$ = newExpNode(ARITHK); $$->op = MENOS; }
+            ;
 
-inclusiveOrExpression
-    : inclusiveOrExpression OR exclusiveOrExpression
-        {
-            $$ = newExpNode(LOGICK);
-            $$->op = OR;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | exclusiveOrExpression { $$ = $1; }
-    ;
+term        : term mulop factor
+                 { $$ = $2;
+                   $$->child[0] = $1;
+                   $$->child[1] = $3;
+                 }
+            | factor
+                 { $$ = $1; }
+            ;
 
-exclusiveOrExpression
-    : exclusiveOrExpression XOR andExpression
-        {
-            $$ = newExpNode(LOGICK);
-            $$->op = XOR;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | andExpression { $$ = $1; }
-    ;
+mulop       : VEZES
+                 { $$ = newExpNode(ARITHK); $$->op = VEZES; }
+            | DIVISAO
+                 { $$ = newExpNode(ARITHK); $$->op = DIVISAO; }
+            ;
 
-andExpression
-    : andExpression AND equalityExpression
-        {
-            $$ = newExpNode(LOGICK);
-            $$->op = AND;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | equalityExpression { $$ = $1; }
-    ;
+factor      : LPAREN expression RPAREN
+                 { $$ = $2; }
+            | var
+                 { $$ = $1; }
+            | call
+                 { $$ = $1; }
+            | num
+                 { $$ = $1; }
+            ;
 
-equalityExpression
-    : equalityExpression equalityOperator relationalExpression
-        {
-            $$ = $2;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | relationalExpression { $$ = $1; }
-    ;
+call        : id LPAREN args RPAREN
+                 { $$ = $1;
+                   $$->kind.var.varKind = CALLK;
+                   $$->child[0] = $3;
+                 }
+            ;
 
-equalityOperator
-    : IGUAL
-        {
-            $$ = newExpNode(RELK);
-            $$->op = IGUAL;
-        }
-    | DIFERENTE
-        {
-            $$ = newExpNode(RELK);
-            $$->op = DIFERENTE;
-        }
-    ;
+args        : arg_list
+                 { $$ = $1; }
+            | /* empty */
+                 { $$ = NULL; }
+            ;
 
-relationalExpression
-    : relationalExpression relationalOperator shiftExpression
-        {
-        	$$ = $2;
-        	$$->child[0] = $1;
-        	$$->child[1] = $3;
-        }
-    | shiftExpression { $$ = $1; }
-    ;
+arg_list    : arg_list COMMA expression
+                 { YYSTYPE t = $1;
+                   if (t != NULL)
+                   { while (t->sibling != NULL)
+                        t = t->sibling;
+                     t->sibling = $3;
+                     $$ = $1; }
+                     else $$ = $3;
+                 }
+            | expression
+                 { $$ = $1; }
+            ;
 
-relationalOperator
-    : MENORIGUAL
-		{
-			$$ = newExpNode(RELK);
-			$$->op = MENORIGUAL;
-		}
-    | MENOR
-		{
-			$$ = newExpNode(RELK);
-			$$->op = MENOR;
-		}
-    | MAIOR
-        {
-        	$$ = newExpNode(RELK);
-        	$$->op = MAIOR;
-        }
-    | MAIORIGUAL
-        {
-        	$$ = newExpNode(RELK);
-        	$$->op = MAIORIGUAL;
-        }
-    ;
+/* REGRAS AUXILIARES PARA TOKENS COM VALOR */
+id          : ID
+                 { $$ = newVarNode(IDK);
+                   $$->kind.var.attr.name = copyString(tokenString);
+                 }
+            ;
 
-shiftExpression
-    : shiftExpression shiftOperator additiveExpression
-        {
-            $$ = $2;
-            $$->child[0] = $1;
-            $$->child[1] = $3;
-        }
-    | additiveExpression { $$ = $1; }
-    ;
-
-shiftOperator
-    : SHIFT_LEFT
-        {
-            $$ = newExpNode(ARITHK);
-            $$->op = SHIFT_LEFT;
-        }
-    | SHIFT_RIGHT
-        {
-            $$ = newExpNode(ARITHK);
-            $$->op = SHIFT_RIGHT;
-        }
-    ;
-
-additiveExpression
-    : additiveExpression additiveOperator multiplicativeExpression
-        {
-        	$$ = $2;
-        	$$->child[0] = $1;
-        	$$->child[1] = $3;
-        }
-	| multiplicativeExpression { $$ = $1; }
-	;
-
-additiveOperator
-    : MAIS
-        {
-        	$$ = newExpNode(ARITHK);
-        	$$->op = MAIS;
-        }
-    | MENOS
-        {
-        	$$ = newExpNode(ARITHK);
-        	$$->op = MENOS;
-        }
-    ;
-
-multiplicativeExpression
-    : multiplicativeExpression multiplicativeOperator unaryExpression
-        {
-        	$$ = $2;
-        	$$->child[0] = $1;
-        	$$->child[1] = $3;
-        }
-    | unaryExpression { $$ = $1; }
-    ;
-
-multiplicativeOperator
-    : VEZES
-        {
-        	$$ = newExpNode(ARITHK);
-        	$$->op = VEZES;
-        }
-    | DIVISAO
-        {
-        	$$ = newExpNode(ARITHK);
-        	$$->op = DIVISAO;
-        }
-    | MODULO
-        {
-            $$ = newExpNode(ARITHK);
-            $$->op = MODULO;
-        }
-    ;
-
-unaryExpression
-    : unaryOperator unaryExpression
-        {
-            $$ = $1;
-            $$->child[0] = $2;
-        }
-    | LPAREN expression RPAREN { $$ = $2; }
-    | var { $$ = $1; }
-    | ativacao { $$ = $1; }
-    | num { $$ = $1; }
-    ;
-
-unaryOperator
-    : AND
-        {
-            $$ = newExpNode(UNARYK);
-            $$->op = AND;
-        }
-    | NOT
-        {
-            $$ = newExpNode(UNARYK);
-            $$->op = NOT;
-        }
-    | MENOS
-        {
-            $$ = newExpNode(UNARYK);
-            $$->op = MENOS;
-        }
-    ;
-
-ativacao
-    : var LPAREN args RPAREN
-        {
-        	$$ = $1;
-        	$$->kind.var.varKind = CALLK;
-        	$$->child[0] = $3;
-            $$->op = CALLK;
-        }
-    ;
-
-args
-    : arg_lista { $$ = $1; }
-    | vazio { $$ = $1; }
-    ;
-
-arg_lista
-    : arg_lista COMMA expression
-        {
-        	YYSTYPE t = $1;
-        	if (t != NULL) {
-        		while (t->sibling != NULL) {
-        			t = t->sibling;
-        		}
-        		t->sibling = $3;
-        		$$ = $1;
-        	} else {
-        		$$ = $3;
-        	}
-        }
-    | expression { $$ = $1; }
-    ;
-
-id
-    : ID
-        {
-        	$$ = newVarNode(IDK);
-        	$$->kind.var.attr.name = copyString(tokenString);
-            $$->type = INTEGER_TYPE;
-        }
-    ;
-
-num
-    : NUM
-		{
-            $$ = newVarNode(CONSTK);
-            $$->kind.var.attr.val = atoi(tokenString);
-            $$->type = INTEGER_TYPE;
-		}
-	;
-
-vazio
-    : { $$ = NULL; }
-    ;
+num         : NUM
+                 { $$ = newVarNode(CONSTK);
+                   $$->kind.var.attr.val = atoi(tokenString);
+                 }
+            ;
 
 %%
 
-int yyerror(char * message) {
-    fprintf(listing,"Syntax error at line %d: %s\n",lineno,message);
-    fprintf(listing,"Current token: ");
-    printToken(yychar,tokenString);
-    Error = TRUE;
-    return 0;
+int yyerror(char * message)
+{ fprintf(listing,"ERRO SINTÁTICO: %s LINHA: %d\n",tokenString,lineno);
+  Error = TRUE;
+  return 0;
 }
 
 /* yylex calls getToken to make Yacc/Bison output
- * compatible with ealier versions of the TINY scanner
+ * compatible with e.g. the TINY parser
  */
-int yylex(void) {
-    return getToken();
-}
+static int yylex(void)
+{ return getToken(); }
 
-TreeNode * parse(void) {
-    yyparse();
-    return savedTree;
-}
-
-TreeNode * getIntNode(TreeNode * childNode) {
-    TreeNode * intNode = newStmtNode(INTEGERK);
-    intNode->op = INT;
-    intNode->type = INTEGER_TYPE;
-    intNode->child[0] = childNode;
-    return intNode;
-}
-
-TreeNode * getVoidNode(TreeNode * childNode) {
-    TreeNode * voidNode = newStmtNode(VOIDK);
-    voidNode->op = VOID;
-    voidNode->type = VOID_TYPE;
-    voidNode->child[0] = childNode;
-    return voidNode;
-}
-
-TreeNode * createSysCall(ExpType type, SysCallKind syscall) {
-    TreeNode * function = newSysNode(syscall);
-    function->lineno = 0;
-    function->op = ID;
-    function->type = type;
-    return type == INTEGER_TYPE ? getIntNode(function) : getVoidNode(function);
-}
-
-void insertNewNode(TreeNode * node) {
-    TreeNode * temp;
-    if (savedTree == NULL) {
-        savedTree = node;
-        savedTree->sibling = NULL;
-    } else {
-        temp = savedTree;
-        while (temp->sibling != NULL) {
-            temp = temp->sibling;
-        }
-        temp->sibling = node;
-        temp->sibling->sibling = NULL;
-    }
+TreeNode * parse(void)
+{ yyparse();
+  return savedTree;
 }
