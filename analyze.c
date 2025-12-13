@@ -1,7 +1,7 @@
 /****************************************************/
 /* File: analyze.c                                  */
 /* Semantic analyzer implementation                 */
-/* Adequado ao Projeto 2S2025 (Standard)            */
+/* Corrigido: Bug de Escopo resolvido               */
 /****************************************************/
 
 #include "globals.h"
@@ -14,7 +14,6 @@ static int globalLocation = 0;
 Scope scope = NULL;
 int mainDeclarada = FALSE;
 
-/* Procedure traverse */
 static void traverse( TreeNode * t,
                void (* preProc) (TreeNode *),
                void (* postProc) (TreeNode *) )
@@ -29,13 +28,11 @@ static void traverse( TreeNode * t,
   }
 }
 
-/* nullProc is a do-nothing procedure */
 static void nullProc(TreeNode * t)
 { if (t==NULL) return;
   else return;
 }
 
-/* InsertNode: constrói a tabela de símbolos */
 static void insertNode( TreeNode * t) {
     switch (t->node) { 
         case STMTK:
@@ -68,7 +65,6 @@ static void insertNode( TreeNode * t) {
                 
                 case IDK:
                 case VECTORK:
-                    /* Parâmetros */
                     if (t->kind.var.mem == PARAMK) {
                         if(st_lookup_top(t->kind.var.attr.name) != -1) {
                              fprintf(listing, "Erro semântico: Parâmetro '%s' já declarado. LINHA: %d\n", t->kind.var.attr.name, t->lineno);
@@ -76,9 +72,7 @@ static void insertNode( TreeNode * t) {
                         } else {
                             st_insert(t->kind.var.attr.name, t->lineno, location++, t, 1);
                         }
-                    } 
-                    /* Declaração de Variável */
-                    else if(t->kind.var.acesso == DECLK) {
+                    } else if(t->kind.var.acesso == DECLK) {
                         if(st_lookup_top(t->kind.var.attr.name) != -1) {
                              fprintf(listing, "Erro semântico: Variável '%s' já declarada. LINHA: %d\n", t->kind.var.attr.name, t->lineno);
                              Error = TRUE;
@@ -90,9 +84,7 @@ static void insertNode( TreeNode * t) {
                                 st_insert(t->kind.var.attr.name, t->lineno, location++, t, tamanho);
                             }
                         }
-                    } 
-                    /* Uso de Variável */
-                    else { 
+                    } else { 
                         BucketList l = verificaGlobal(t->kind.var.attr.name);
                         if(st_lookup(t->kind.var.attr.name) == -1 && l == NULL) {
                              fprintf(listing, "Erro semântico: Variável '%s' não declarada. LINHA: %d\n", t->kind.var.attr.name, t->lineno);
@@ -103,7 +95,6 @@ static void insertNode( TreeNode * t) {
                     }
                     break;
                 case CALLK:
-                    /* Verifica se é função do sistema ou do usuário */
                     if(sys_lookup(t->kind.var.attr.name) == NULL && !st_lookup_func(t->kind.var.attr.name)) {
                          fprintf(listing, "Erro semântico: Função '%s' não declarada. LINHA: %d\n", t->kind.var.attr.name, t->lineno);
                          Error = TRUE;
@@ -119,6 +110,7 @@ static void insertNode( TreeNode * t) {
 static void afterInsertNode( TreeNode * t ) {
     switch (t->node) { 
         case STMTK:
+            /* Se for fim de um bloco composto {}, sai do escopo */
             if (t->kind.stmt == COMPK && scope != globalScope) {
                  scope->tamanhoBlocoMemoria = location;
                  location = 0;
@@ -126,11 +118,20 @@ static void afterInsertNode( TreeNode * t ) {
                  scope = sc_top();
             }
             break;
+        
+        /* CORREÇÃO CRÍTICA AQUI: */
+        case VARK:
+            /* Se for fim de uma declaração de função, sai do escopo dela */
+            if (t->kind.var.varKind == FUNCTIONK) {
+                 sc_pop();
+                 scope = sc_top();
+            }
+            break;
+            
         default: break;
     }
 }
 
-/* Verificação de Tipos Simplificada */
 static void checkNode(TreeNode * t) {
     switch (t->node) {
         case EXPK:
@@ -152,7 +153,6 @@ static void checkNode(TreeNode * t) {
 }
 
 void buildSymtab(TreeNode * syntaxTree) {
-    /* REGISTRA FUNÇÕES BUILT-IN: INPUT e OUTPUT [cite: 224-228] */
     TreeNode * inputNode = newSysNode(INPUT);
     sys_insert(sys_create("input", inputNode));
     TreeNode * outputNode = newSysNode(OUTPUT);
