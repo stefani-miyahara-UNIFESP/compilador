@@ -1,7 +1,7 @@
 /****************************************************/
-/* Arquivo: target.h                                */
-/* Gerador de código objeto                         */
-/* Diego Wendel de Oliveira Ferreira		        */
+/* File: target.h                                   */
+/* Gerador de código objeto (Assembly)              */
+/* Define TargetOpcode para evitar conflitos        */
 /****************************************************/
 
 #ifndef _TARGET_H_
@@ -9,7 +9,8 @@
 
 #include "cgen.h"
 
-typedef enum opcode {
+/* AQUI ESTÁ A DEFINIÇÃO QUE FALTA: TargetOpcode */
+typedef enum targetOpcode {
     _ADDI, _SUBI, _MULI, _DIVI, _MODI,
     _ANDI, _ORI, _XORI, _NOT, _LANDI, _LORI,
     _SLLI, _SRLI,
@@ -22,7 +23,7 @@ typedef enum opcode {
     _SYSCALL, _EXEC, _EXEC_AGAIN,
     _J, _JTM, _JAL, _HALT,
     _RTYPE
-} Opcode;
+} TargetOpcode;
 
 typedef enum function {
     _ADD, _SUB, _MUL, _DIV, _MOD,
@@ -37,23 +38,6 @@ typedef enum type {
     TYPE_R, TYPE_I, TYPE_J
 } Type;
 
-/**
- * Registradores da máquina alvo
- *
- * $rz - Registrador zero
- * $aX - Registradores de parâmetros de função
- * $sX - Registradores salvos
- * $tX - Registradores temporários
- * $v0 - Registrador que guarda o valor retornado de uma função
- * $kX - Registradores de uso específico do Kernel
- *  - $k0: Endereço de retorno para o Kernel
- *  - $k1: Endereço usado para começar um programa de posição arbitrária
- * $gpb - Global pointer backup
- * $spb - Stack pointer backup
- * $gp - Registrador global
- * $sp - Registrador da Stack
- * $ra - Registrador que guarda o endereço para se realizar um return
- */
 typedef enum registerName {
     $rz, $a0, $a1, $a2, $a3, $s0, $s1, $s2,
     $s3, $s4, $s5, $s6, $s7, $s8, $s9, $t0,
@@ -76,9 +60,8 @@ typedef struct targetOperand {
         char * label;
     } enderecamento;
     AddressingType tipoEnderecamento;
-
-    RegisterName regName; // deslocamento da stack reg nao é suficiente para identificar registradores
-    int deslocamento; // deslocamento com base no Stack reg
+    RegisterName regName; 
+    int deslocamento; 
 } * TargetOperand;
 
 typedef struct escopo {
@@ -101,7 +84,7 @@ typedef struct registrador {
 } Registrador;
 
 typedef struct objeto {
-    Opcode opcode;
+    TargetOpcode opcode; /* Agora o compilador vai reconhecer isso */
     Function func;
     Type type;
     TargetOperand op1;
@@ -116,44 +99,28 @@ typedef struct label {
     struct label * next;
 } * Label;
 
+/* Protótipos */
 void geraCodigoObjeto(Quadruple q, CodeInfo codeInfo);
-
 void printCode(Objeto instrucao);
-
 Escopo createEscopo(const char * nome);
-
 void pushEscopo(Escopo e);
-
 TargetOperand getTargetOpByName(char * name);
-
 TargetOperand getAndUpdateTargetOperand(Registrador reg, Operand op);
-
 void updateRegisterContent(TargetOperand operand);
-
 void removeOperand(TargetOperand opTarget);
-
 void removeAllSavedOperands(void);
 
-Objeto createObjInstTypeR(Opcode opcode, Function func, Type type, TargetOperand op1, TargetOperand op2, TargetOperand op3);
-
-Objeto createObjInst(Opcode opcode, Type type, TargetOperand op1, TargetOperand op2, TargetOperand op3);
-
+Objeto createObjInstTypeR(TargetOpcode opcode, Function func, Type type, TargetOperand op1, TargetOperand op2, TargetOperand op3);
+Objeto createObjInst(TargetOpcode opcode, Type type, TargetOperand op1, TargetOperand op2, TargetOperand op3);
 Objeto insertObjInst(Objeto obj);
 
 TargetOperand getImediato(int val);
-
 TargetOperand getOperandLabel(char * name);
-
 Label createLabel(char * nome, int linha);
-
 void insertLabel(char * nome, int linha);
-
 int getLinhaLabel(char * nome);
-
 void prepararRegistradores(void);
-
 void prepararOperandosEspeciais(void);
-
 Objeto getCodigoObjeto(void);
 
 #endif
